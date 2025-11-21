@@ -1,0 +1,43 @@
+# Python
+services/users_service/__pycache__/
+services/users_service/.pytest_cache/
+services/users_service/*.pyc
+services/users_service/env/
+services/users_service/.venv/
+
+# Java (Spring Boot)
+services/orders_service/target/
+services/orders_service/.mvn/
+services/orders_service/mvnw
+services/orders_service/mvnw.cmd
+
+# Node (React)
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Docker junk
+*.log
+*.pid
+*.seed
+*~ 
+docker-data/
+**/tmp/
+**/.dockerignore
+**/.env
+**/.env.* 
+.env
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Python virtualenvs
+venv/
+ENV/
+env/
