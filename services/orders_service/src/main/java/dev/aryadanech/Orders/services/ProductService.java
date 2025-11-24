@@ -10,7 +10,7 @@ import java.util.List;
 @Service
 public class ProductService {
     @Autowired
-    private ProductRepository productRepository;
+    ProductRepository productRepository;
 
     public Product saveProduct(Product product) {
         return productRepository.save(product);

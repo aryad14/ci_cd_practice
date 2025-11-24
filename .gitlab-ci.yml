@@ -1,0 +1,72 @@
+stages:
+  - test
+  - build
+  - docker
+
+variables:
+  MAVEN_OPTS: "-Dmaven.repo.local=$CI_PROJECT_DIR/.m2"
+  DOCKER_DRIVER: overlay2
+
+cache:
+  paths:
+    - .m2/
+    - www/node_modules/
+
+
+# USERS SERVICE (Python)
+users_service_test:
+  stage: test
+  image: python:3.12
+  services:
+    - name: mysql:8
+      alias: users-db
+  variables:
+    DATABASE_URL: mysql+pymysql://root:root@users-db:3306/usersdb
+  before_script:
+    - pip install --upgrade pip
+    - pip install -r services/users_service/requirements.txt
+  script:
+    - |
+      if [ -d "services/users_service/tests" ]; then pytest services/users_service/tests; else echo "No tests directory"; fi
+
+
+# ORDERS SERVICE (Java)
+orders_service_test:
+  stage: test
+  image: maven:3.9.6-eclipse-temurin-21
+  services:
+    - name: mysql:8
+      alias: orders-db
+  variables:
+    SPRING_DATASOURCE_URL: jdbc:mysql://orders-db:3306/ordersdb
+    SPRING_DATASOURCE_USERNAME: root
+    SPRING_DATASOURCE_PASSWORD: root
+  script:
+    - mvn -B -f services/orders_service/pom.xml clean package
+    - mvn -B -f services/orders_service/pom.xml test
+
+
+# FRONTEND (Node)
+frontend_test:
+  stage: test
+  image: node:20-alpine
+  before_script:
+    - cd www
+    - npm ci
+  script:
+    - npm run lint
+    - npm run build
+
+
+# DOCKER BUILD (optional)
+docker_build:
+  stage: docker
+  image: docker:24.0.7
+  services:
+    - docker:dind
+  script:
+    - docker build -t users-service:ci ./services/users_service
+    - docker build -t orders-service:ci ./services/orders_service
+    - docker build -t frontend:ci ./www
+  only:
+    - main
