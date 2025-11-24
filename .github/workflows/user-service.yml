@@ -1,0 +1,33 @@
+name: Users Service CI
+
+on:
+  push:
+    paths:
+      - 'services/users_service/**'
+      - '.github/workflows/users-service.yml'
+  pull_request:
+    paths:
+      - 'services/users_service/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: usersdb
+        ports:
+          - 3306:3306
+        options: --health-cmd="mysqladmin ping --silent" --health-interval=10s --health-timeout=5s --health-retries=5
+    env:
+      DATABASE_URL: mysql+pymysql://root:root@127.0.0.1:3306/usersdb
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r services/users_service/requirements.txt
+      - run: |
+          if [ -d "services/users_service/tests" ]; then pytest services/users_service/tests; else echo "No tests directory"; fi
