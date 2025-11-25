@@ -7,8 +7,11 @@ on:
     branches: [ main ]
 
 jobs:
+
+  # 1. BUILD + TEST
   build-and-test:
     runs-on: ubuntu-latest
+
     services:
       mysql-users:
         image: mysql:8
@@ -17,7 +20,12 @@ jobs:
           MYSQL_DATABASE: usersdb
         ports:
           - 3306:3306
-        options: --health-cmd="mysqladmin ping --silent" --health-interval=10s --health-timeout=5s --health-retries=5
+        options: >-
+          --health-cmd="mysqladmin ping --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
       mysql-orders:
         image: mysql:8
         env:
@@ -25,7 +33,11 @@ jobs:
           MYSQL_DATABASE: ordersdb
         ports:
           - 3307:3306
-        options: --health-cmd="mysqladmin ping --silent" --health-interval=10s --health-timeout=5s --health-retries=5
+        options: >-
+          --health-cmd="mysqladmin ping --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
 
     env:
       DATABASE_URL: mysql+pymysql://root:root@127.0.0.1:3306/usersdb
@@ -49,12 +61,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run Python tests (if any)
+      - name: Run Python tests
         working-directory: services/users_service
-        run: |
-          if [ -d "tests" ]; then pytest; else echo "No tests directory"; fi
+        run: pytest || echo "No tests found"
 
-      # ORDERS SERVICE (Java)
+      # ORDERS SERVICE (Spring Boot)
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
@@ -63,13 +74,13 @@ jobs:
 
       - name: Build Java project
         working-directory: services/orders_service
-        run: mvn clean package -B -DskipTests
+        run: mvn clean package -DskipTests
 
       - name: Run Java tests
         working-directory: services/orders_service
-        run: mvn test -B
+        run: mvn test
 
-      # FRONTEND (Node)
+      # FRONTEND (Vite/React)
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -87,37 +98,57 @@ jobs:
         working-directory: www
         run: npm run build
 
+
+  # 2. BUILD DOCKER & PUSH TO GHCR
   docker-build:
     runs-on: ubuntu-latest
     needs: build-and-test
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Build Docker images for each service
-      - name: Build users_service Docker image
-        run: docker build -t users-service:ci ./services/users_service
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GH_TOKEN }}
 
-      - name: Build orders_service Docker image
-        run: docker build -t orders-service:ci ./services/orders_service
+      # USERS SERVICE IMAGE
+      - name: Build users service image
+        run: |
+          docker build -t ghcr.io/${{ github.repository }}/users-service:latest services/users_service
+          docker push ghcr.io/${{ github.repository }}/users-service:latest
 
-      - name: Build frontend Docker image
-        run: docker build -t frontend:ci ./www
+      # ORDERS SERVICE IMAGE
+      - name: Build orders service image
+        run: |
+          docker build -t ghcr.io/${{ github.repository }}/orders-service:latest services/orders_service
+          docker push ghcr.io/${{ github.repository }}/orders-service:latest
 
-      # Optionally push images to Docker Hub or GHCR
-      # - name: Log in to Docker Hub
-      #   uses: docker/login-action@v3
-      #   with:
-      #     username: ${{ secrets.DOCKERHUB_USERNAME }}
-      #     password: ${{ secrets.DOCKERHUB_TOKEN }}
+      # FRONTEND IMAGE
+      - name: Build frontend image
+        run: |
+          docker build -t ghcr.io/${{ github.repository }}/frontend:latest www
+          docker push ghcr.io/${{ github.repository }}/frontend:latest
 
-      # - name: Push users_service image
-      #   run: docker push yourdockerhub/users-service:ci
 
-      # - name: Push orders_service image
-      #   run: docker push yourdockerhub/orders-service:ci
+  # 3. DEPLOY TO EC2
+  deploy:
+    runs-on: ubuntu-latest
+    needs: docker-build
 
-      # - name: Push frontend image
-      #   run: docker push yourdockerhub/frontend:ci
-
-  # Add a deploy job here if needed, e.g. to Kubernetes, ECS, etc.
+    steps:
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd /home/CI_CD_Demo
+            git pull origin main
+            docker compose pull
+            docker compose down
+            docker compose up -d
