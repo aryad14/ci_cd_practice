@@ -147,7 +147,7 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            cd /home/ci_cd_practice
+            cd ./home/ci_cd_practice
             git pull origin main
             docker compose pull
             docker compose down
